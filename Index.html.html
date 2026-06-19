@@ -1,0 +1,1580 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>حسابات يومية</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, onSnapshot, addDoc, deleteDoc, updateDoc, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCviVdfkt1B-lrG_S02iKtMbMxBrufr9ec",
+  authDomain: "hisabat-e5f15.firebaseapp.com",
+  projectId: "hisabat-e5f15",
+  storageBucket: "hisabat-e5f15.firebasestorage.app",
+  messagingSenderId: "153888099232",
+  appId: "1:153888099232:web:1cd2bfbda4f2e28abff2c5"
+};
+
+const app  = initializeApp(firebaseConfig);
+const db   = getFirestore(app);
+const entriesCol = collection(db, 'entries');
+const settingsDoc = doc(db, 'settings', 'config');
+
+// ── Expose DB helpers to global scope ──
+window._db = {
+  async addEntry(entry){
+    await addDoc(entriesCol, entry);
+  },
+  async deleteEntry(firestoreId){
+    await deleteDoc(doc(db, 'entries', firestoreId));
+  },
+  async updateEntry(firestoreId, data){
+    await updateDoc(doc(db, 'entries', firestoreId), data);
+  },
+  async getSettings(){
+    const snap = await getDoc(settingsDoc);
+    return snap.exists() ? snap.data() : {};
+  },
+  async saveSettings(data){
+    await setDoc(settingsDoc, data, {merge:true});
+  },
+  listenEntries(callback){
+    return onSnapshot(entriesCol, snap => {
+      const list = snap.docs.map(d => ({...d.data(), _fid: d.id}));
+      list.sort((a,b) => (b.id||0) - (a.id||0));
+      callback(list);
+    });
+  }
+};
+
+// Init app after DB ready
+window._dbReady = true;
+window.dispatchEvent(new Event('dbReady'));
+</script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&display=swap');
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --ink:#1a1a2e;--ink-soft:#4a4a6a;--ink-faint:#8888aa;
+  --surface:#f4f5fb;--card:#fff;--border:#e2e4f0;
+  --green:#10b981;--green-bg:#ecfdf5;
+  --red:#ef4444;--red-bg:#fef2f2;
+  --blue:#3b82f6;--blue-bg:#eff6ff;
+  --purple:#8b5cf6;--purple-bg:#f5f3ff;
+  --gold:#f59e0b;--gold-bg:#fffbeb;
+  --orange:#f97316;--orange-bg:#fff7ed;
+  --radius:12px;
+  --shadow:0 2px 12px rgba(26,26,46,.07);
+  --shadow-lg:0 8px 32px rgba(26,26,46,.13);
+}
+
+body{font-family:'Cairo',sans-serif;background:var(--surface);color:var(--ink);min-height:100vh;font-size:15px}
+
+/* ── TOPBAR ── */
+.topbar{
+  background:linear-gradient(135deg,#1a1a2e 0%,#2d2b55 100%);
+  color:#fff;padding:0 24px;height:60px;
+  display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:200;
+  box-shadow:0 2px 16px rgba(0,0,0,.25);
+}
+.topbar-brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:18px}
+.topbar-brand .dot{width:10px;height:10px;background:var(--gold);border-radius:50%;display:inline-block}
+.topbar-right{display:flex;align-items:center;gap:12px}
+.topbar-date{font-size:13px;color:rgba(255,255,255,.6);font-weight:400}
+.tab-nav{display:flex;gap:2px;background:rgba(255,255,255,.1);border-radius:10px;padding:3px}
+.tab-nav button{
+  border:none;background:transparent;color:rgba(255,255,255,.7);
+  padding:5px 14px;border-radius:8px;font-family:'Cairo',sans-serif;
+  font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;
+}
+.tab-nav button.active{background:#fff;color:var(--ink)}
+
+/* ── LAYOUT ── */
+.main{max-width:960px;margin:0 auto;padding:20px 16px 60px}
+
+/* ── PAGE VIEWS ── */
+.page{display:none}.page.active{display:block}
+
+/* ── DATE NAV ── */
+.date-nav{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:12px 16px;
+  box-shadow:var(--shadow);margin-bottom:20px;
+}
+.date-nav label{font-size:12px;color:var(--ink-faint);font-weight:700}
+.date-nav input[type="date"]{
+  border:1.5px solid var(--border);border-radius:8px;
+  padding:6px 12px;font-family:'Cairo',sans-serif;font-size:14px;
+  color:var(--ink);background:var(--surface);cursor:pointer;outline:none;
+  transition:border-color .2s;
+}
+.date-nav input:focus{border-color:var(--blue)}
+.btn-today{
+  background:var(--blue);color:#fff;border:none;border-radius:8px;
+  padding:6px 16px;font-family:'Cairo',sans-serif;font-size:13px;font-weight:700;
+  cursor:pointer;transition:opacity .15s;margin-right:auto;
+}
+.btn-today:hover{opacity:.85}
+
+/* ── SUMMARY CARDS ── */
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+.sum-card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:14px 16px;
+  box-shadow:var(--shadow);display:flex;flex-direction:column;gap:3px;
+  position:relative;overflow:hidden;
+}
+.sum-card::after{
+  content:'';position:absolute;top:0;right:0;width:4px;height:100%;
+}
+.sum-card.s-sale::after{background:var(--green)}
+.sum-card.s-buy::after{background:var(--red)}
+.sum-card.s-expense::after{background:var(--orange)}
+.sum-card.s-profit::after{background:var(--gold)}
+.sum-label{font-size:11px;color:var(--ink-faint);font-weight:700;letter-spacing:.4px}
+.sum-value{font-size:22px;font-weight:900;line-height:1.1}
+.s-sale .sum-value{color:var(--green)}
+.s-buy .sum-value{color:var(--red)}
+.s-expense .sum-value{color:var(--orange)}
+.s-profit .sum-value{color:var(--gold)}
+.sum-sub{font-size:11px;color:var(--ink-faint)}
+
+/* ── FORM ── */
+.form-card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:18px 20px;
+  box-shadow:var(--shadow);margin-bottom:20px;
+}
+.form-card h3{font-size:14px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.form-card h3 .ficon{
+  width:28px;height:28px;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;font-size:15px;
+}
+.fgrid{display:grid;grid-template-columns:140px 1fr 120px 90px auto;gap:10px;align-items:end}
+.ff{display:flex;flex-direction:column;gap:5px}
+.ff label{font-size:11px;color:var(--ink-faint);font-weight:700}
+.ff input,.ff select{
+  border:1.5px solid var(--border);border-radius:8px;
+  padding:8px 12px;font-family:'Cairo',sans-serif;font-size:14px;
+  color:var(--ink);background:var(--surface);outline:none;
+  transition:border-color .2s,box-shadow .2s;width:100%;
+}
+.ff input:focus,.ff select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,130,246,.1)}
+
+/* type selector pills */
+.type-pills{display:flex;gap:5px;flex-wrap:wrap}
+.type-pill{
+  border:1.5px solid var(--border);background:var(--surface);
+  color:var(--ink-soft);border-radius:20px;padding:5px 12px;
+  font-family:'Cairo',sans-serif;font-size:12px;font-weight:700;
+  cursor:pointer;transition:all .15s;white-space:nowrap;
+}
+.type-pill.p-sale{border-color:var(--green);color:var(--green)}
+.type-pill.p-sale.sel{background:var(--green);color:#fff}
+.type-pill.p-buy{border-color:var(--red);color:var(--red)}
+.type-pill.p-buy.sel{background:var(--red);color:#fff}
+.type-pill.p-expense{border-color:var(--orange);color:var(--orange)}
+.type-pill.p-expense.sel{background:var(--orange);color:#fff}
+
+.btn-add{
+  background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;
+  border:none;border-radius:8px;padding:9px 22px;
+  font-family:'Cairo',sans-serif;font-size:14px;font-weight:700;
+  cursor:pointer;transition:opacity .15s,transform .1s;white-space:nowrap;
+}
+.btn-add:hover{opacity:.9;transform:translateY(-1px)}
+.btn-add:active{transform:translateY(0)}
+
+/* ── SEARCH & FILTERS ── */
+.search-bar{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:14px 16px;
+  box-shadow:var(--shadow);margin-bottom:12px;
+  display:flex;flex-direction:column;gap:12px;
+}
+.search-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.search-input-wrap{position:relative;flex:1;min-width:200px}
+.search-icon{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:15px;pointer-events:none;color:var(--ink-faint)}
+.search-input{
+  width:100%;border:1.5px solid var(--border);border-radius:8px;
+  padding:8px 36px 8px 12px;font-family:'Cairo',sans-serif;font-size:14px;
+  color:var(--ink);background:var(--surface);outline:none;
+  transition:border-color .2s;
+}
+.search-input:focus{border-color:var(--blue)}
+.range-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.range-row label{font-size:12px;color:var(--ink-faint);font-weight:700;white-space:nowrap}
+.range-row input[type="date"]{
+  border:1.5px solid var(--border);border-radius:8px;
+  padding:6px 10px;font-family:'Cairo',sans-serif;font-size:13px;
+  color:var(--ink);background:var(--surface);outline:none;
+  transition:border-color .2s;
+}
+.range-row input:focus{border-color:var(--blue)}
+.btn-range-search{
+  background:var(--purple);color:#fff;border:none;border-radius:8px;
+  padding:7px 16px;font-family:'Cairo',sans-serif;font-size:13px;font-weight:700;
+  cursor:pointer;transition:opacity .15s;white-space:nowrap;
+}
+.btn-range-search:hover{opacity:.85}
+.btn-range-clear{
+  background:none;color:var(--ink-faint);border:1.5px solid var(--border);
+  border-radius:8px;padding:6px 14px;font-family:'Cairo',sans-serif;
+  font-size:13px;font-weight:700;cursor:pointer;transition:all .15s;
+}
+.btn-range-clear:hover{border-color:var(--red);color:var(--red)}
+
+.filter-chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{
+  border:1.5px solid var(--border);background:var(--card);
+  color:var(--ink-soft);border-radius:20px;padding:4px 14px;
+  font-family:'Cairo',sans-serif;font-size:12px;font-weight:700;
+  cursor:pointer;transition:all .15s;
+}
+.chip:hover{border-color:var(--blue);color:var(--blue)}
+.chip.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+.chip.c-sale{border-color:var(--green);color:var(--green)}
+.chip.c-sale.active{background:var(--green);color:#fff}
+.chip.c-buy{border-color:var(--red);color:var(--red)}
+.chip.c-buy.active{background:var(--red);color:#fff}
+.chip.c-expense{border-color:var(--orange);color:var(--orange)}
+.chip.c-expense.active{background:var(--orange);color:#fff}
+
+/* ── LIST ── */
+.list-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.list-header h3{font-size:14px;font-weight:700}
+.list-count{
+  background:var(--blue-bg);color:var(--blue);
+  border-radius:20px;padding:2px 10px;font-size:12px;font-weight:700;
+}
+.range-notice{
+  background:var(--purple-bg);border:1px solid #ddd6fe;
+  border-radius:8px;padding:8px 14px;font-size:12px;color:var(--purple);
+  font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:6px;
+}
+
+.tx-list{display:flex;flex-direction:column;gap:8px}
+.tx-card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:13px 16px;
+  display:flex;align-items:center;gap:12px;
+  box-shadow:var(--shadow);transition:box-shadow .2s,transform .15s;
+  animation:fadeIn .2s ease;
+}
+.tx-card:hover{box-shadow:var(--shadow-lg);transform:translateY(-1px)}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+.tx-icon{
+  width:40px;height:40px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;flex-shrink:0;
+}
+.tx-icon.sale{background:var(--green-bg)}
+.tx-icon.buy{background:var(--red-bg)}
+.tx-icon.expense{background:var(--orange-bg)}
+
+.tx-info{flex:1;min-width:0}
+.tx-desc{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tx-meta{font-size:12px;color:var(--ink-faint);display:flex;gap:10px;margin-top:2px;flex-wrap:wrap}
+
+.tx-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.tx-amount{font-size:17px;font-weight:900}
+.tx-amount.sale{color:var(--green)}
+.tx-amount.buy{color:var(--red)}
+.tx-amount.expense{color:var(--orange)}
+
+.tx-badge{
+  font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;
+}
+.tx-badge.sale{background:var(--green-bg);color:var(--green)}
+.tx-badge.buy{background:var(--red-bg);color:var(--red)}
+.tx-badge.expense{background:var(--orange-bg);color:var(--orange)}
+
+.tx-date-badge{
+  font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;
+  background:var(--blue-bg);color:var(--blue);
+}
+
+.tx-del{
+  background:none;border:none;color:var(--ink-faint);
+  cursor:pointer;font-size:15px;padding:5px;border-radius:6px;
+  transition:color .15s,background .15s;flex-shrink:0;
+}
+.tx-del:hover{color:var(--red);background:var(--red-bg)}
+
+/* ── EMPTY ── */
+.empty{text-align:center;padding:40px 24px;color:var(--ink-faint)}
+.empty .eicon{font-size:44px;display:block;margin-bottom:10px}
+.empty p{font-size:14px}
+
+/* ── REPORT PAGE ── */
+.report-header{
+  background:linear-gradient(135deg,#1e3a5f,#2d5986);
+  color:#fff;border-radius:var(--radius);padding:20px 24px;
+  margin-bottom:20px;box-shadow:var(--shadow-lg);
+}
+.report-header h2{font-size:18px;font-weight:900;margin-bottom:4px}
+.report-header p{font-size:13px;color:rgba(255,255,255,.7)}
+
+.report-date-row{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:14px 16px;
+  box-shadow:var(--shadow);margin-bottom:20px;
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+}
+.report-date-row label{font-size:12px;color:var(--ink-faint);font-weight:700}
+.report-date-row input{
+  border:1.5px solid var(--border);border-radius:8px;
+  padding:6px 12px;font-family:'Cairo',sans-serif;font-size:14px;
+  color:var(--ink);background:var(--surface);outline:none;transition:border-color .2s;
+}
+.report-date-row input:focus{border-color:var(--blue)}
+.btn-gen{
+  background:linear-gradient(135deg,#1e3a5f,#2d5986);color:#fff;
+  border:none;border-radius:8px;padding:8px 20px;
+  font-family:'Cairo',sans-serif;font-size:14px;font-weight:700;
+  cursor:pointer;transition:opacity .15s;white-space:nowrap;
+}
+.btn-gen:hover{opacity:.85}
+
+.report-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+.rcard{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);
+  text-align:center;
+}
+.rcard-icon{font-size:24px;margin-bottom:6px}
+.rcard-val{font-size:22px;font-weight:900}
+.rcard-lbl{font-size:11px;color:var(--ink-faint);font-weight:700;margin-top:2px}
+
+.report-table-wrap{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;margin-bottom:20px;
+}
+.report-table-title{
+  padding:14px 18px;font-size:14px;font-weight:700;
+  border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;
+}
+table{width:100%;border-collapse:collapse}
+thead th{
+  background:var(--surface);padding:10px 14px;
+  text-align:right;font-size:12px;color:var(--ink-faint);
+  font-weight:700;border-bottom:1px solid var(--border);
+}
+tbody tr:hover{background:var(--surface)}
+tbody td{padding:10px 14px;font-size:13px;border-bottom:1px solid var(--border)}
+tbody tr:last-child td{border-bottom:none}
+
+.bar-chart{padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.bar-row{display:flex;align-items:center;gap:10px}
+.bar-label{font-size:12px;font-weight:700;color:var(--ink-soft);width:70px;text-align:left;flex-shrink:0}
+.bar-track{flex:1;background:var(--surface);border-radius:4px;height:16px;overflow:hidden}
+.bar-fill{height:100%;border-radius:4px;transition:width .6s ease}
+.bar-val{font-size:12px;font-weight:700;width:90px;text-align:right;flex-shrink:0}
+
+/* ── TOAST ── */
+.toast{
+  position:fixed;bottom:24px;left:50%;
+  transform:translateX(-50%) translateY(80px);
+  background:var(--ink);color:#fff;
+  padding:10px 24px;border-radius:24px;font-size:14px;font-weight:600;
+  box-shadow:var(--shadow-lg);transition:transform .3s cubic-bezier(.34,1.56,.64,1),opacity .3s;
+  opacity:0;pointer-events:none;z-index:999;white-space:nowrap;
+}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+
+/* ── EDIT BUTTON ── */
+.tx-edit{
+  background:none;border:1.5px solid var(--border);border-radius:6px;
+  color:var(--blue);font-size:12px;padding:3px 8px;cursor:pointer;
+  font-family:'Cairo',sans-serif;font-weight:700;transition:all .15s;
+}
+.tx-edit:hover{background:var(--blue-bg);border-color:var(--blue)}
+
+/* ── EDIT MODAL ── */
+#editModal{
+  position:fixed;inset:0;z-index:7000;
+  background:rgba(0,0,0,.4);backdrop-filter:blur(3px);
+  display:none;align-items:center;justify-content:center;
+}
+#editModal.open{display:flex}
+.edit-box{
+  background:#fff;border-radius:16px;padding:26px 24px;
+  width:340px;box-shadow:0 16px 48px rgba(0,0,0,.22);
+}
+.edit-box h3{font-size:15px;font-weight:900;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.edit-field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.edit-field label{font-size:11px;color:var(--ink-faint);font-weight:700}
+.edit-field input,.edit-field select{
+  border:1.5px solid var(--border);border-radius:8px;
+  padding:9px 14px;font-family:'Cairo',sans-serif;font-size:14px;
+  color:var(--ink);outline:none;transition:border-color .2s;
+}
+.edit-field input:focus,.edit-field select:focus{border-color:var(--blue)}
+.edit-actions{display:flex;gap:8px;margin-top:16px}
+.btn-edit-save{
+  flex:1;background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;
+  border:none;border-radius:8px;padding:10px;
+  font-family:'Cairo',sans-serif;font-size:14px;font-weight:700;cursor:pointer;
+}
+.btn-edit-cancel{
+  background:none;border:1.5px solid var(--border);border-radius:8px;
+  padding:10px 16px;font-family:'Cairo',sans-serif;font-size:14px;
+  font-weight:700;color:var(--ink-soft);cursor:pointer;
+}
+
+/* ── PRINT FILTER ROW ── */
+.print-filter-row{
+  display:flex;align-items:center;flex-wrap:wrap;gap:14px;
+  background:var(--card);border:1.5px solid var(--border);
+  border-radius:12px;padding:10px 16px;margin-bottom:18px;
+}
+.pf-label{font-size:13px;font-weight:800;color:var(--ink);margin-left:4px}
+.pf-opt{
+  display:flex;align-items:center;gap:5px;font-size:13px;
+  color:var(--ink-soft);font-weight:700;cursor:pointer;
+}
+.pf-opt input{accent-color:var(--blue);cursor:pointer;width:15px;height:15px}
+
+/* ── LOCK SCREEN ── */
+#lockScreen{
+  position:fixed;inset:0;z-index:9999;
+  background:linear-gradient(135deg,#1a1a2e 0%,#2d2b55 100%);
+  display:flex;align-items:center;justify-content:center;
+}
+.lock-box{
+  background:#fff;border-radius:20px;padding:36px 32px;
+  width:320px;text-align:center;
+  box-shadow:0 24px 60px rgba(0,0,0,.4);
+}
+.lock-icon{font-size:48px;margin-bottom:12px}
+.lock-title{font-size:20px;font-weight:900;color:var(--ink);margin-bottom:4px}
+.lock-sub{font-size:13px;color:var(--ink-faint);margin-bottom:22px}
+.lock-input{
+  width:100%;border:2px solid var(--border);border-radius:10px;
+  padding:11px 16px;font-family:'Cairo',sans-serif;font-size:16px;
+  color:var(--ink);text-align:center;letter-spacing:4px;outline:none;
+  transition:border-color .2s;margin-bottom:14px;
+}
+.lock-input:focus{border-color:var(--blue)}
+.lock-input.shake{animation:shake .35s ease}
+@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+.btn-unlock{
+  width:100%;background:linear-gradient(135deg,#1a1a2e,#2d2b55);
+  color:#fff;border:none;border-radius:10px;padding:12px;
+  font-family:'Cairo',sans-serif;font-size:15px;font-weight:700;
+  cursor:pointer;transition:opacity .15s;
+}
+.btn-unlock:hover{opacity:.88}
+.lock-err{font-size:12px;color:var(--red);margin-top:8px;min-height:16px}
+
+/* ── CHANGE PASSWORD MODAL ── */
+#pwModal{
+  position:fixed;inset:0;z-index:8000;
+  background:rgba(0,0,0,.45);backdrop-filter:blur(3px);
+  display:none;align-items:center;justify-content:center;
+}
+#pwModal.open{display:flex}
+.pw-box{
+  background:#fff;border-radius:16px;padding:28px 26px;
+  width:320px;box-shadow:0 16px 48px rgba(0,0,0,.25);
+}
+.pw-box h3{font-size:16px;font-weight:900;margin-bottom:18px;display:flex;align-items:center;gap:8px}
+.pw-field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.pw-field label{font-size:11px;color:var(--ink-faint);font-weight:700}
+.pw-field input{
+  border:1.5px solid var(--border);border-radius:8px;
+  padding:9px 14px;font-family:'Cairo',sans-serif;font-size:14px;
+  color:var(--ink);outline:none;transition:border-color .2s;
+}
+.pw-field input:focus{border-color:var(--blue)}
+.pw-actions{display:flex;gap:8px;margin-top:16px}
+.btn-pw-save{
+  flex:1;background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;
+  border:none;border-radius:8px;padding:10px;
+  font-family:'Cairo',sans-serif;font-size:14px;font-weight:700;cursor:pointer;
+}
+.btn-pw-cancel{
+  background:none;border:1.5px solid var(--border);border-radius:8px;
+  padding:10px 16px;font-family:'Cairo',sans-serif;font-size:14px;
+  font-weight:700;color:var(--ink-soft);cursor:pointer;
+}
+.pw-msg{font-size:12px;margin-top:8px;min-height:16px}
+
+/* btn lock in topbar */
+.btn-lock{
+  background:rgba(255,255,255,.15);border:none;color:#fff;
+  border-radius:8px;padding:5px 12px;font-family:'Cairo',sans-serif;
+  font-size:13px;font-weight:700;cursor:pointer;transition:background .15s;
+}
+.btn-lock:hover{background:rgba(255,255,255,.25)}
+
+/* ── PRINT ── */
+/* ── LOADING OVERLAY ── */
+#loadingOverlay{
+  position:fixed;inset:0;z-index:9998;
+  background:linear-gradient(135deg,#1a1a2e 0%,#2d2b55 100%);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:16px;color:#fff;
+}
+.spinner{
+  width:40px;height:40px;border:3px solid rgba(255,255,255,.2);
+  border-top-color:#fff;border-radius:50%;
+  animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loadingOverlay p{font-size:14px;color:rgba(255,255,255,.7)}
+
+@media print{
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  @page{size:A4;margin:12mm 14mm}
+
+  /* hide everything except report */
+  .topbar,.date-nav,.form-card,.search-bar,.tab-nav,
+  .btn-gen,.no-print,.print-filter-row,
+  #pg-daily,#pg-search,#pg-search *,
+  .report-date-row,.report-table-wrap:first-of-type,
+  #pg-report .bar-chart,.report-empty{display:none!important}
+
+  body{background:#fff!important;font-size:11px}
+  .main{max-width:100%;padding:0;margin:0}
+  .page{display:block!important;padding:0!important}
+
+  /* report header compact */
+  .report-header{
+    background:#1a1a2e!important;color:#fff!important;
+    padding:10px 16px!important;border-radius:0!important;
+    margin-bottom:10px!important;
+    display:flex!important;align-items:center!important;
+    justify-content:space-between!important;
+  }
+  .report-header h2{font-size:14px!important;margin:0!important}
+  .report-header p{font-size:10px!important}
+
+  /* KPI cards in one row, compact */
+  .report-grid{
+    display:grid!important;
+    grid-template-columns:repeat(3,1fr)!important;
+    gap:6px!important;margin-bottom:10px!important;
+  }
+  .rcard{padding:8px 10px!important;border-radius:6px!important}
+  .rcard-icon{font-size:14px!important;margin-bottom:2px!important}
+  .rcard-val{font-size:15px!important}
+  .rcard-lbl{font-size:9px!important}
+
+  /* table compact */
+  .report-table-wrap{border-radius:0!important;box-shadow:none!important;border:1px solid #ddd!important}
+  .report-table-title{font-size:11px!important;padding:7px 12px!important}
+  #rptTable{font-size:10px!important}
+  #rptTable th,#rptTable td{padding:5px 8px!important}
+  #rptTable th{font-size:9px!important}
+  .tx-badge{font-size:8px!important;padding:2px 5px!important}
+
+  /* hide edit/delete buttons in print */
+  .tx-del,.tx-edit{display:none!important}
+
+  #reportContent{display:block!important}
+  #reportEmpty{display:none!important}
+}
+
+/* ── RESPONSIVE ── */
+@media(max-width:700px){
+  .summary{grid-template-columns:1fr 1fr}
+  .fgrid{grid-template-columns:1fr 1fr}
+  .fgrid .btn-add{grid-column:span 2}
+  .report-grid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:480px){
+  .summary{grid-template-columns:1fr 1fr}
+  .s-profit{grid-column:span 2}
+}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-brand">
+    <span class="dot"></span>
+    حسابات يومية
+  </div>
+  <div class="topbar-right">
+    <div class="tab-nav">
+      <button class="active" onclick="showPage('pg-daily',this)">📋 اليومية</button>
+      <button onclick="showPage('pg-search',this)">🔍 بحث</button>
+      <button onclick="showPage('pg-report',this)">📊 تقرير</button>
+    </div>
+    <span class="topbar-date" id="topbarDate"></span>
+    <button class="btn-lock" onclick="openChangePw()">🔑 تغيير الباسورد</button>
+    <button class="btn-lock" onclick="openChangeEditPw()" style="background:rgba(239,68,68,.25)">✏️ باسورد التعديل</button>
+    <button class="btn-lock" onclick="lockApp()">🔒 قفل</button>
+  </div>
+</div>
+
+<div class="main">
+
+<!-- ══════════════════ PAGE: DAILY ══════════════════ -->
+<div class="page active" id="pg-daily">
+
+  <!-- Date Nav -->
+  <div class="date-nav">
+    <label>📅 اليوم</label>
+    <input type="date" id="dateInput">
+    <button class="btn-today" onclick="goToday()">اليوم ←</button>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary">
+    <div class="sum-card s-sale">
+      <span class="sum-label">📈 مبيعات</span>
+      <span class="sum-value" id="sumSales">٠.٠٠</span>
+      <span class="sum-sub" id="sumSalesC">٠ عملية</span>
+    </div>
+
+    <div class="sum-card s-expense">
+      <span class="sum-label">💸 مصاريف</span>
+      <span class="sum-value" id="sumExp">٠.٠٠</span>
+      <span class="sum-sub" id="sumExpC">٠ عملية</span>
+    </div>
+    <div class="sum-card s-profit">
+      <span class="sum-label">💰 صافي</span>
+      <span class="sum-value" id="sumProfit">٠.٠٠</span>
+      <span class="sum-sub" id="sumProfitS">—</span>
+    </div>
+  </div>
+
+  <!-- Add Form -->
+  <div class="form-card">
+    <h3>
+      <span class="ficon" id="formIcon" style="background:var(--blue-bg)">➕</span>
+      إضافة قيد جديد
+    </h3>
+    <div class="fgrid">
+      <div class="ff">
+        <label>النوع</label>
+        <div class="type-pills">
+          <button class="type-pill p-sale sel" id="pill-sale" onclick="setType('sale')">📈 بيع</button>
+          <button class="type-pill p-expense" id="pill-expense" onclick="setType('expense')">💸 مصروف</button>
+        </div>
+      </div>
+      <div class="ff">
+        <label>البيان / الوصف</label>
+        <input type="text" id="txDesc" placeholder="مثال: بيع أحذية رياضية">
+      </div>
+      <div class="ff">
+        <label>المبلغ (جنيه)</label>
+        <input type="number" id="txAmount" placeholder="0.00" min="0" step="0.01">
+      </div>
+      <div class="ff">
+        <label>الوقت</label>
+        <input type="time" id="txTime">
+      </div>
+      <div class="ff" style="justify-content:flex-end">
+        <button class="btn-add" onclick="addEntry()">إضافة ✓</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- List -->
+  <div class="list-header">
+    <h3>قيود <span id="currentDayLabel"></span></h3>
+    <span class="list-count" id="dailyCount">٠</span>
+  </div>
+  <div class="filter-chips" style="margin-bottom:10px">
+    <button class="chip active" onclick="setDayFilter('all',this)">الكل</button>
+    <button class="chip c-sale"    onclick="setDayFilter('sale',this)">مبيعات</button>
+    <button class="chip c-expense" onclick="setDayFilter('expense',this)">مصاريف</button>
+  </div>
+  <div class="tx-list" id="dailyList"></div>
+
+</div><!-- /pg-daily -->
+
+
+<!-- ══════════════════ PAGE: SEARCH ══════════════════ -->
+<div class="page" id="pg-search">
+
+  <div class="search-bar">
+    <div class="search-row">
+      <div class="search-input-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" class="search-input" id="searchQ" placeholder="ابحث في البيان أو الوصف..." oninput="runSearch()">
+      </div>
+    </div>
+
+    <div class="range-row">
+      <label>📅 من</label>
+      <input type="date" id="rangeFrom">
+      <label>إلى</label>
+      <input type="date" id="rangeTo">
+      <button class="btn-range-search" onclick="runSearch()">بحث بالتاريخ</button>
+      <button class="btn-range-clear" onclick="clearSearch()">مسح</button>
+    </div>
+
+    <div class="filter-chips">
+      <button class="chip active" onclick="setSearchFilter('all',this)">الكل</button>
+      <button class="chip c-sale"    onclick="setSearchFilter('sale',this)">مبيعات</button>
+      <button class="chip c-expense" onclick="setSearchFilter('expense',this)">مصاريف</button>
+    </div>
+  </div>
+
+  <div id="rangeNotice" class="range-notice" style="display:none">
+    📅 <span id="rangeNoticeText"></span>
+  </div>
+
+  <div class="list-header">
+    <h3>نتائج البحث</h3>
+    <span class="list-count" id="searchCount">٠</span>
+  </div>
+
+  <!-- Search summary mini-cards -->
+  <div id="searchSummary" style="display:none;margin-bottom:12px">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+      <div class="sum-card s-sale" style="padding:12px 14px">
+        <span class="sum-label">مبيعات</span>
+        <span class="sum-value" id="srSales" style="font-size:18px">—</span>
+      </div>
+      <div class="sum-card s-expense" style="padding:12px 14px">
+        <span class="sum-label">مصاريف</span>
+        <span class="sum-value" id="srExp" style="font-size:18px">—</span>
+      </div>
+      <div class="sum-card s-profit" style="padding:12px 14px">
+        <span class="sum-label">صافي</span>
+        <span class="sum-value" id="srNet" style="font-size:18px">—</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="tx-list" id="searchList">
+    <div class="empty">
+      <span class="eicon">🔍</span>
+      <p>اكتب كلمة أو حدد نطاق تاريخ للبحث</p>
+    </div>
+  </div>
+
+</div><!-- /pg-search -->
+
+
+<!-- ══════════════════ PAGE: REPORT ══════════════════ -->
+<div class="page" id="pg-report">
+
+  <div class="report-header">
+    <h2>📊 التقرير اليومي</h2>
+    <p>ملخص تفصيلي لأي يوم أو فترة زمنية</p>
+  </div>
+
+  <div class="report-date-row">
+    <label>من</label>
+    <input type="date" id="rptFrom">
+    <label>إلى</label>
+    <input type="date" id="rptTo">
+    <button class="btn-gen" onclick="genReport()">توليد التقرير</button>
+    <button class="btn-range-clear no-print" onclick="window.print()">🖨️ طباعة</button>
+    <button class="btn-range-clear no-print" id="btnPdf" onclick="exportPDF()" style="background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;border:none">📄 تحميل PDF</button>
+  </div>
+
+  <div class="print-filter-row no-print">
+    <span class="pf-label">🖨️ ما الذي تريد طباعته؟</span>
+    <label class="pf-opt"><input type="radio" name="printFilter" value="all" checked onchange="genReport()"> الكل</label>
+    <label class="pf-opt"><input type="radio" name="printFilter" value="sale" onchange="genReport()"> المبيعات فقط</label>
+    <label class="pf-opt"><input type="radio" name="printFilter" value="expense" onchange="genReport()"> المصاريف فقط</label>
+  </div>
+
+  <div id="reportContent" style="display:none">
+
+    <!-- KPI Cards -->
+    <div class="report-grid" id="rptKpis"></div>
+
+    <!-- Bar Chart -->
+    <div class="report-table-wrap" style="margin-bottom:20px">
+      <div class="report-table-title">📊 مقارنة بيانية</div>
+      <div class="bar-chart" id="rptBars"></div>
+    </div>
+
+    <!-- Breakdown Table -->
+    <div class="report-table-wrap">
+      <div class="report-table-title">📋 تفاصيل العمليات</div>
+      <table id="rptTable">
+        <thead>
+          <tr>
+            <th>التاريخ</th>
+            <th>الوقت</th>
+            <th>النوع</th>
+            <th>البيان</th>
+            <th>المبلغ</th>
+          </tr>
+        </thead>
+        <tbody id="rptBody"></tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <div id="reportEmpty" class="empty">
+    <span class="eicon">📊</span>
+    <p>حدد الفترة الزمنية واضغط "توليد التقرير"</p>
+  </div>
+
+</div><!-- /pg-report -->
+
+</div><!-- /main -->
+
+<div class="toast" id="toast"></div>
+
+<!-- LOADING OVERLAY -->
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <p>جاري الاتصال...</p>
+</div>
+
+<!-- EDIT MODAL -->
+<div id="editModal">
+  <div class="edit-box">
+    <h3>✏️ تعديل العملية</h3>
+    <div class="edit-field">
+      <label>النوع</label>
+      <select id="editType">
+        <option value="sale">📈 بيع</option>
+        <option value="expense">💸 مصروف</option>
+      </select>
+    </div>
+    <div class="edit-field">
+      <label>البيان</label>
+      <input type="text" id="editDesc" placeholder="وصف العملية">
+    </div>
+    <div class="edit-field">
+      <label>المبلغ</label>
+      <input type="number" id="editAmount" placeholder="0.00" min="0" step="0.01">
+    </div>
+    <div class="edit-field">
+      <label>التاريخ</label>
+      <input type="date" id="editDate">
+    </div>
+    <div class="edit-actions">
+      <button class="btn-edit-cancel" onclick="closeEditModal()">إلغاء</button>
+      <button class="btn-edit-save" onclick="saveEdit()">حفظ التعديل</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT PASSWORD CONFIRM MODAL -->
+<div id="editPwModal" style="position:fixed;inset:0;z-index:7500;background:rgba(0,0,0,.45);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center">
+  <div class="pw-box">
+    <h3>🔒 تأكيد الصلاحية</h3>
+    <p style="font-size:13px;color:var(--ink-faint);margin-bottom:16px" id="editPwDesc">أدخل باسورد التعديل للمتابعة</p>
+    <div class="pw-field">
+      <label>باسورد التعديل</label>
+      <input type="password" id="editPwInput" placeholder="••••••" maxlength="30"
+        onkeydown="if(event.key==='Enter')confirmEditPw()">
+    </div>
+    <div class="pw-msg" id="editPwMsg"></div>
+    <div class="pw-actions" style="margin-top:14px">
+      <button class="btn-pw-cancel" onclick="closeEditPwModal()">إلغاء</button>
+      <button class="btn-pw-save" onclick="confirmEditPw()">تأكيد</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOCK SCREEN -->
+<div id="lockScreen">
+  <div class="lock-box">
+    <div class="lock-icon">🔐</div>
+    <div class="lock-title">حسابات يومية</div>
+    <div class="lock-sub">أدخل الباسورد للدخول</div>
+    <input type="password" class="lock-input" id="lockInput" placeholder="••••••" maxlength="30"
+      onkeydown="if(event.key==='Enter')tryUnlock()">
+    <button class="btn-unlock" onclick="tryUnlock()">دخول</button>
+    <div class="lock-err" id="lockErr"></div>
+  </div>
+</div>
+
+<!-- CHANGE PASSWORD MODAL -->
+<div id="pwModal">
+  <div class="pw-box">
+    <h3>🔑 تغيير الباسورد</h3>
+    <div class="pw-field">
+      <label>الباسورد الحالي</label>
+      <input type="password" id="pwCurrent" placeholder="أدخل الباسورد الحالي">
+    </div>
+    <div class="pw-field">
+      <label>الباسورد الجديد</label>
+      <input type="password" id="pwNew" placeholder="أدخل الباسورد الجديد">
+    </div>
+    <div class="pw-field">
+      <label>تأكيد الباسورد الجديد</label>
+      <input type="password" id="pwConfirm" placeholder="أعد كتابة الباسورد الجديد">
+    </div>
+    <div class="pw-msg" id="pwMsg"></div>
+    <div class="pw-actions">
+      <button class="btn-pw-cancel" onclick="closePwModal()">إلغاء</button>
+      <button class="btn-pw-save" onclick="saveNewPw()">حفظ</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════ HELPERS ═══════════════════════════
+const SK = 'hisabat_v2';
+const AR = s => s.toString();
+const fmt = n => parseFloat(n||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
+const todayStr = () => new Date().toISOString().slice(0,10);
+const nowTime  = () => new Date().toTimeString().slice(0,5);
+function arDate(s){
+  if(!s) return '';
+  const [y,m,d]=s.split('-');
+  const ms=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+  return `${AR(+d)} ${ms[+m-1]} ${AR(y)}`;
+}
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+const typeLabel = {sale:'بيع',expense:'مصروف'};
+const typeIcon  = {sale:'📈',expense:'💸'};
+
+// ═══════════════════════════ STATE ══════════════════════════════
+let entries = [];
+let currentDate  = todayStr();
+let dayFilter    = 'all';
+let searchFilter = 'all';
+
+// Firebase save/delete/update (no local save anymore)
+async function save(){ /* entries synced via onSnapshot */ }
+
+async function fbAdd(entry){
+  try{ await window._db.addEntry(entry); }
+  catch(e){ showToast('⚠️ خطأ في الحفظ'); console.error(e); }
+}
+async function fbDelete(firestoreId){
+  try{ await window._db.deleteEntry(firestoreId); }
+  catch(e){ showToast('⚠️ خطأ في الحذف'); console.error(e); }
+}
+async function fbUpdate(firestoreId, data){
+  try{ await window._db.updateEntry(firestoreId, data); }
+  catch(e){ showToast('⚠️ خطأ في التعديل'); console.error(e); }
+}
+
+// Start listening once Firebase is ready
+function startFirebase(){
+  window._db.listenEntries(list => {
+    entries = list;
+    renderDaily();
+    if(document.getElementById('pg-search').classList.contains('active')) runSearch();
+    document.getElementById('loadingOverlay').style.display = 'none';
+  });
+  // Load passwords from Firebase
+  window._db.getSettings().then(s => {
+    if(s.loginPw)  _loginPw  = s.loginPw;
+    if(s.editPw)   _editPw   = s.editPw;
+  });
+}
+
+if(window._dbReady){ startFirebase(); }
+else { window.addEventListener('dbReady', startFirebase, {once:true}); }
+
+// ═══════════════════════════ INIT ═══════════════════════════════
+const dateInput = document.getElementById('dateInput');
+dateInput.value = currentDate;
+dateInput.addEventListener('change',()=>{currentDate=dateInput.value;renderDaily()});
+
+document.getElementById('txTime').value = nowTime();
+document.getElementById('topbarDate').textContent = arDate(todayStr());
+
+// Report defaults: today
+document.getElementById('rptFrom').value = todayStr();
+document.getElementById('rptTo').value   = todayStr();
+
+renderDaily();
+
+// ═══════════════════════════ PAGE TABS ══════════════════════════
+function showPage(id, btn){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-nav button').forEach(b=>b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ═══════════════════════════ TYPE ═══════════════════════════════
+let currentType = 'sale';
+function setType(t){
+  currentType = t;
+  ['sale','expense'].forEach(x=>{
+    const el = document.getElementById('pill-'+x);
+    el.classList.toggle('sel', x===t);
+  });
+  const icons={sale:'📈',expense:'💸'};
+  const bgs  ={sale:'var(--green-bg)',expense:'var(--orange-bg)'};
+  document.getElementById('formIcon').textContent  = icons[t];
+  document.getElementById('formIcon').style.background = bgs[t];
+}
+
+function goToday(){currentDate=todayStr();dateInput.value=currentDate;renderDaily()}
+
+// ═══════════════════════════ ADD ════════════════════════════════
+function addEntry(){
+  const desc   = document.getElementById('txDesc').value.trim();
+  const amount = parseFloat(document.getElementById('txAmount').value);
+  const time   = document.getElementById('txTime').value || nowTime();
+  if(!desc)          {showToast('⚠️ أدخل الوصف');return}
+  if(!amount||amount<=0){showToast('⚠️ أدخل مبلغاً صحيحاً');return}
+
+  const entry = {id:Date.now(), date:currentDate, time, type:currentType, desc, amount};
+  fbAdd(entry);
+  document.getElementById('txDesc').value='';
+  document.getElementById('txAmount').value='';
+  document.getElementById('txTime').value=nowTime();
+  const labels={sale:'✅ تمت إضافة البيع',expense:'✅ تمت إضافة المصروف'};
+  showToast(labels[currentType]);
+}
+
+function deleteEntry(id){
+  const e = entries.find(x=>x.id===id);
+  if(!e) return;
+  requireEditPw('حذف العملية', ()=>{
+    fbDelete(e._fid);
+    showToast('🗑️ تم الحذف');
+  });
+}
+
+// ═══════════════════════════ DAILY RENDER ═══════════════════════
+function setDayFilter(f,el){
+  dayFilter=f;
+  document.querySelectorAll('#pg-daily .chip').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  renderList();
+}
+
+function renderDaily(){
+  renderSummary();
+  renderList();
+  document.getElementById('currentDayLabel').textContent = arDate(currentDate);
+}
+
+function renderSummary(){
+  const day = entries.filter(e=>e.date===currentDate);
+  const sales   = day.filter(e=>e.type==='sale').reduce((s,e)=>s+e.amount,0);
+  const exps    = day.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
+  const profit  = sales - exps;
+
+  document.getElementById('sumSales').textContent  = fmt(sales);
+  document.getElementById('sumExp').textContent    = fmt(exps);
+  document.getElementById('sumProfit').textContent = fmt(profit);
+  document.getElementById('sumSalesC').textContent = AR(day.filter(e=>e.type==='sale').length)+' عملية';
+  document.getElementById('sumExpC').textContent   = AR(day.filter(e=>e.type==='expense').length)+' عملية';
+
+  const pEl = document.getElementById('sumProfit');
+  const sEl = document.getElementById('sumProfitS');
+  if(profit>0){pEl.style.color='var(--green)';sEl.textContent='▲ ربح'}
+  else if(profit<0){pEl.style.color='var(--red)';sEl.textContent='▼ خسارة'}
+  else{pEl.style.color='var(--gold)';sEl.textContent='= متعادل'}
+}
+
+function renderList(){
+  let list = entries.filter(e=>e.date===currentDate);
+  if(dayFilter!=='all') list=list.filter(e=>e.type===dayFilter);
+  document.getElementById('dailyCount').textContent = AR(list.length);
+  renderTxList('dailyList', list, false);
+}
+
+// ═══════════════════════════ TX LIST RENDERER ═══════════════════
+function renderTxList(containerId, list, showDate){
+  const el = document.getElementById(containerId);
+  if(!list.length){
+    el.innerHTML=`<div class="empty"><span class="eicon">📋</span><p>لا توجد نتائج</p></div>`;
+    return;
+  }
+  el.innerHTML = list.map(e=>`
+    <div class="tx-card">
+      <div class="tx-icon ${e.type}">${typeIcon[e.type]}</div>
+      <div class="tx-info">
+        <div class="tx-desc">${esc(e.desc)}</div>
+        <div class="tx-meta">
+          <span>🕐 ${e.time}</span>
+          ${showDate?`<span>📅 ${arDate(e.date)}</span>`:''}
+        </div>
+      </div>
+      <div class="tx-right">
+        <span class="tx-badge ${e.type}">${typeLabel[e.type]}</span>
+        <span class="tx-amount ${e.type}">${e.type==='sale'?'+':'−'}${fmt(e.amount)}</span>
+        <button class="tx-edit" onclick="openEditModal(${e.id})">✏️ تعديل</button>
+        <button class="tx-del" onclick="deleteEntry(${e.id})">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ═══════════════════════════ SEARCH ═════════════════════════════
+function setSearchFilter(f,el){
+  searchFilter=f;
+  document.querySelectorAll('#pg-search .chip').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  runSearch();
+}
+
+function clearSearch(){
+  document.getElementById('searchQ').value='';
+  document.getElementById('rangeFrom').value='';
+  document.getElementById('rangeTo').value='';
+  document.getElementById('rangeNotice').style.display='none';
+  document.getElementById('searchSummary').style.display='none';
+  document.getElementById('searchCount').textContent=AR(0);
+  document.getElementById('searchList').innerHTML=`<div class="empty"><span class="eicon">🔍</span><p>اكتب كلمة أو حدد نطاق تاريخ للبحث</p></div>`;
+}
+
+function runSearch(){
+  const q    = document.getElementById('searchQ').value.trim().toLowerCase();
+  const from = document.getElementById('rangeFrom').value;
+  const to   = document.getElementById('rangeTo').value;
+
+  let res = [...entries];
+
+  if(q) res = res.filter(e=>e.desc.toLowerCase().includes(q));
+  if(from) res = res.filter(e=>e.date>=from);
+  if(to)   res = res.filter(e=>e.date<=to);
+  if(searchFilter!=='all') res = res.filter(e=>e.type===searchFilter);
+
+  // notice
+  const noticeEl = document.getElementById('rangeNotice');
+  if(from||to){
+    noticeEl.style.display='flex';
+    document.getElementById('rangeNoticeText').textContent =
+      `${from?'من '+arDate(from):''}${from&&to?' — ':''}${to?'إلى '+arDate(to):''}`;
+  } else {
+    noticeEl.style.display='none';
+  }
+
+  document.getElementById('searchCount').textContent = AR(res.length);
+
+  // mini summary
+  const sumEl = document.getElementById('searchSummary');
+  if(res.length>0){
+    sumEl.style.display='block';
+    const s=res.filter(e=>e.type==='sale').reduce((a,e)=>a+e.amount,0);
+    const x=res.filter(e=>e.type==='expense').reduce((a,e)=>a+e.amount,0);
+    const n=s-x;
+    document.getElementById('srSales').textContent=fmt(s);
+    document.getElementById('srExp').textContent=fmt(x);
+    const nEl=document.getElementById('srNet');
+    nEl.textContent=fmt(n);
+    nEl.style.color=n>0?'var(--green)':n<0?'var(--red)':'var(--gold)';
+  } else {
+    sumEl.style.display='none';
+  }
+
+  renderTxList('searchList', res, true);
+}
+
+// ═══════════════════════════ REPORT ═════════════════════════════
+function genReport(){
+  const from = document.getElementById('rptFrom').value;
+  const to   = document.getElementById('rptTo').value;
+  if(!from||!to){showToast('⚠️ حدد الفترة الزمنية');return}
+  if(from>to){showToast('⚠️ تاريخ البداية بعد النهاية');return}
+
+  const filterType = (document.querySelector('input[name="printFilter"]:checked')||{}).value || 'all';
+
+  let data = entries.filter(e=>e.date>=from&&e.date<=to);
+  document.getElementById('reportEmpty').style.display = data.length?'none':'block';
+  document.getElementById('reportContent').style.display = data.length?'block':'none';
+  if(!data.length){showToast('لا توجد بيانات في هذه الفترة');return}
+
+  if(filterType !== 'all'){
+    data = data.filter(e=>e.type===filterType);
+  }
+
+  const sales = data.filter(e=>e.type==='sale').reduce((a,e)=>a+e.amount,0);
+  const exps  = data.filter(e=>e.type==='expense').reduce((a,e)=>a+e.amount,0);
+  const net   = sales-exps;
+  const txCount = data.length;
+
+  // KPI cards
+  let kpiHtml = '';
+  if(filterType==='all'||filterType==='sale'){
+    kpiHtml += `
+    <div class="rcard">
+      <div class="rcard-icon">📈</div>
+      <div class="rcard-val" style="color:var(--green)">${fmt(sales)}</div>
+      <div class="rcard-lbl">إجمالي المبيعات</div>
+    </div>`;
+  }
+  if(filterType==='all'||filterType==='expense'){
+    kpiHtml += `
+    <div class="rcard">
+      <div class="rcard-icon">💸</div>
+      <div class="rcard-val" style="color:var(--orange)">${fmt(exps)}</div>
+      <div class="rcard-lbl">إجمالي المصاريف</div>
+    </div>`;
+  }
+  if(filterType==='all'){
+    kpiHtml += `
+    <div class="rcard">
+      <div class="rcard-icon">${net>=0?'💰':'📉'}</div>
+      <div class="rcard-val" style="color:${net>=0?'var(--green)':'var(--red)'}">${fmt(net)}</div>
+      <div class="rcard-lbl">صافي الربح</div>
+    </div>`;
+  }
+  document.getElementById('rptKpis').innerHTML = kpiHtml;
+  document.getElementById('rptKpis').style.gridTemplateColumns = `repeat(${filterType==='all'?3:1}, 1fr)`;
+
+  // Bar chart
+  const maxVal = Math.max(sales,exps,0.01);
+  let barsHtml = '';
+  if(filterType==='all'||filterType==='sale'){
+    barsHtml += `
+    <div class="bar-row">
+      <span class="bar-label">مبيعات</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${(sales/maxVal*100).toFixed(1)}%;background:var(--green)"></div></div>
+      <span class="bar-val" style="color:var(--green)">${fmt(sales)} ج</span>
+    </div>`;
+  }
+  if(filterType==='all'||filterType==='expense'){
+    barsHtml += `
+    <div class="bar-row">
+      <span class="bar-label">مصاريف</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${(exps/maxVal*100).toFixed(1)}%;background:var(--orange)"></div></div>
+      <span class="bar-val" style="color:var(--orange)">${fmt(exps)} ج</span>
+    </div>`;
+  }
+  if(filterType==='all'){
+    barsHtml += `
+    <div class="bar-row">
+      <span class="bar-label">صافي</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${net>0?(net/maxVal*100).toFixed(1):0}%;background:var(--gold)"></div></div>
+      <span class="bar-val" style="color:var(--gold)">${fmt(Math.max(net,0))} ج</span>
+    </div>`;
+  }
+  document.getElementById('rptBars').innerHTML = barsHtml;
+
+  // Table
+  const tbody = document.getElementById('rptBody');
+  tbody.innerHTML = data.map(e=>`
+    <tr>
+      <td>${arDate(e.date)}</td>
+      <td>${e.time}</td>
+      <td><span class="tx-badge ${e.type}">${typeLabel[e.type]}</span></td>
+      <td>${esc(e.desc)}</td>
+      <td class="tx-amount ${e.type}" style="font-size:14px">${e.type==='sale'?'+':'−'}${fmt(e.amount)}</td>
+    </tr>
+  `).join('');
+
+  showToast(`✅ تقرير من ${arDate(from)} إلى ${arDate(to)}`);
+}
+
+// ═══════════════════════════ PDF EXPORT ═════════════════════════
+function exportPDF(){
+  const from = document.getElementById('rptFrom').value;
+  const to   = document.getElementById('rptTo').value;
+  if(!from||!to){showToast('⚠️ ولد التقرير الأول');return}
+
+  const filterType = (document.querySelector('input[name="printFilter"]:checked')||{}).value||'all';
+  let data = entries.filter(e=>e.date>=from&&e.date<=to);
+  if(!data.length){showToast('لا توجد بيانات');return}
+  if(filterType!=='all') data=data.filter(e=>e.type===filterType);
+
+  const sales = data.filter(e=>e.type==='sale').reduce((a,e)=>a+e.amount,0);
+  const exps  = data.filter(e=>e.type==='expense').reduce((a,e)=>a+e.amount,0);
+  const net   = sales-exps;
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+
+  // ── HEADER BAR ──
+  doc.setFillColor(26,26,46);
+  doc.rect(0,0,W,28,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(16);
+  doc.text('Daily Accounts Report', W/2, 12, {align:'center'});
+  doc.setFontSize(9);
+  doc.setFont('helvetica','normal');
+  doc.setTextColor(180,180,210);
+  const filterLabel = filterType==='all'?'All':filterType==='sale'?'Sales Only':'Expenses Only';
+  doc.text(`Period: ${from}  to  ${to}   |   Filter: ${filterLabel}`, W/2, 20, {align:'center'});
+
+  let y = 36;
+
+  // ── KPI BOXES ──
+  const kpis = [];
+  if(filterType==='all'||filterType==='sale')   kpis.push({label:'Total Sales',   val:fmt(sales), color:[16,185,129]});
+  if(filterType==='all'||filterType==='expense') kpis.push({label:'Total Expenses',val:fmt(exps),  color:[249,115,22]});
+  if(filterType==='all')                          kpis.push({label:'Net Profit',    val:fmt(net),   color: net>=0?[16,185,129]:[239,68,68]});
+
+  const bw = (W-28)/kpis.length - 4;
+  kpis.forEach((k,i)=>{
+    const x = 14 + i*(bw+4);
+    doc.setFillColor(245,246,251);
+    doc.roundedRect(x, y, bw, 20, 3, 3, 'F');
+    doc.setDrawColor(...k.color);
+    doc.setLineWidth(0.8);
+    doc.roundedRect(x, y, bw, 20, 3, 3, 'S');
+    doc.setTextColor(...k.color);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(13);
+    doc.text(k.val+' EGP', x+bw/2, y+10, {align:'center'});
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100,100,130);
+    doc.text(k.label, x+bw/2, y+16.5, {align:'center'});
+  });
+  y += 28;
+
+  // ── TABLE ──
+  const head = [['Date','Time','Type','Description','Amount (EGP)']];
+  const body = data.map(e=>[
+    e.date,
+    e.time,
+    e.type==='sale'?'Sale':'Expense',
+    e.desc,
+    (e.type==='sale'?'+':'-')+fmt(e.amount)
+  ]);
+
+  doc.autoTable({
+    startY: y,
+    head,
+    body,
+    styles:{ font:'helvetica', fontSize:9, cellPadding:3, halign:'center' },
+    headStyles:{ fillColor:[26,26,46], textColor:255, fontStyle:'bold', fontSize:9 },
+    columnStyles:{
+      0:{cellWidth:24},
+      1:{cellWidth:18},
+      2:{cellWidth:20},
+      3:{halign:'right', cellWidth:'auto'},
+      4:{cellWidth:30, halign:'center',
+         fontStyle:'bold',
+      },
+    },
+    didParseCell(d){
+      if(d.section==='body' && d.column.index===4){
+        const row = data[d.row.index];
+        d.cell.styles.textColor = row&&row.type==='sale'?[16,185,129]:[239,68,68];
+      }
+      if(d.section==='body' && d.column.index===2){
+        const row = data[d.row.index];
+        d.cell.styles.textColor = row&&row.type==='sale'?[16,185,129]:[249,115,22];
+      }
+    },
+    alternateRowStyles:{fillColor:[248,249,255]},
+    margin:{left:14, right:14},
+    tableLineColor:[220,222,235],
+    tableLineWidth:0.3,
+  });
+
+  // ── FOOTER ──
+  const pages = doc.internal.getNumberOfPages();
+  for(let p=1;p<=pages;p++){
+    doc.setPage(p);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(160,160,180);
+    doc.text(`Page ${p} of ${pages}`, W/2, H-6, {align:'center'});
+    doc.text(`Generated: ${new Date().toLocaleDateString('en')}`, 14, H-6);
+  }
+
+  const fname = `report_${from}_${to}${filterType!=='all'?'_'+filterType:''}.pdf`;
+  doc.save(fname);
+  showToast('✅ تم تحميل PDF');
+}
+
+// ═══════════════════════════ TOAST ══════════════════════════════
+let toastTimer;
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),2400);
+}
+
+// ═══════════════════════════ EDIT ENTRY ═════════════════════════
+let editingId = null;
+
+function openEditModal(id){
+  const e = entries.find(x=>x.id===id);
+  if(!e) return;
+  requireEditPw('تعديل العملية', ()=>{
+    editingId = id;
+    document.getElementById('editType').value   = e.type;
+    document.getElementById('editDesc').value   = e.desc;
+    document.getElementById('editAmount').value = e.amount;
+    document.getElementById('editDate').value   = e.date;
+    document.getElementById('editModal').classList.add('open');
+    setTimeout(()=>document.getElementById('editDesc').focus(), 50);
+  });
+}
+
+function closeEditModal(){
+  document.getElementById('editModal').classList.remove('open');
+  editingId = null;
+}
+
+function saveEdit(){
+  const e = entries.find(x=>x.id===editingId);
+  if(!e) return;
+  const desc   = document.getElementById('editDesc').value.trim();
+  const amount = parseFloat(document.getElementById('editAmount').value);
+  const type   = document.getElementById('editType').value;
+  const date   = document.getElementById('editDate').value;
+  if(!desc){showToast('⚠️ اكتب البيان');return}
+  if(!amount||amount<=0){showToast('⚠️ أدخل مبلغ صحيح');return}
+  fbUpdate(e._fid, {desc, amount, type, date});
+  showToast('✅ تم التعديل');
+  closeEditModal();
+}
+
+document.getElementById('editModal').addEventListener('click', function(e){
+  if(e.target===this) closeEditModal();
+});
+
+// ═══════════════════════════ PASSWORDS ══════════════════════════
+const DEFAULT_LOGIN_PW = '1234';
+const DEFAULT_EDIT_PW  = '0000';
+let _loginPw = DEFAULT_LOGIN_PW;
+let _editPw  = DEFAULT_EDIT_PW;
+
+async function savePwToCloud(key, val){
+  try{ await window._db.saveSettings({[key]: val}); }
+  catch(e){ console.error('pw save error',e); }
+}
+
+// ── LOCK SCREEN ──
+window.addEventListener('DOMContentLoaded', ()=>{
+  document.getElementById('lockInput').focus();
+});
+
+function tryUnlock(){
+  const val = document.getElementById('lockInput').value;
+  const errEl = document.getElementById('lockErr');
+  if(val === _loginPw){
+    document.getElementById('lockScreen').style.display = 'none';
+    document.getElementById('lockInput').value = '';
+    errEl.textContent = '';
+  } else {
+    errEl.textContent = '❌ باسورد غلط، حاول تاني';
+    const inp = document.getElementById('lockInput');
+    inp.classList.remove('shake'); void inp.offsetWidth; inp.classList.add('shake');
+    inp.value=''; inp.focus();
+  }
+}
+
+function lockApp(){
+  document.getElementById('lockScreen').style.display='flex';
+  setTimeout(()=>document.getElementById('lockInput').focus(),50);
+}
+
+// ── CHANGE LOGIN PASSWORD ──
+function openChangePw(){
+  document.getElementById('pwCurrent').value='';
+  document.getElementById('pwNew').value='';
+  document.getElementById('pwConfirm').value='';
+  document.getElementById('pwMsg').textContent='';
+  document.getElementById('pwModal').classList.add('open');
+  setTimeout(()=>document.getElementById('pwCurrent').focus(),50);
+}
+function closePwModal(){ document.getElementById('pwModal').classList.remove('open'); }
+
+async function saveNewPw(){
+  const cur=document.getElementById('pwCurrent').value;
+  const nw=document.getElementById('pwNew').value.trim();
+  const confirm=document.getElementById('pwConfirm').value.trim();
+  const msgEl=document.getElementById('pwMsg');
+  if(cur!==_loginPw){msgEl.style.color='var(--red)';msgEl.textContent='❌ الباسورد الحالي غلط';return}
+  if(!nw){msgEl.style.color='var(--red)';msgEl.textContent='❌ أدخل الباسورد الجديد';return}
+  if(nw!==confirm){msgEl.style.color='var(--red)';msgEl.textContent='❌ الباسورد مش متطابق';return}
+  _loginPw = nw;
+  await savePwToCloud('loginPw', nw);
+  msgEl.style.color='var(--green)';msgEl.textContent='✅ تم تغيير باسورد الدخول';
+  setTimeout(()=>closePwModal(),1000);
+}
+document.getElementById('pwModal').addEventListener('click',function(e){if(e.target===this)closePwModal()});
+
+// ── CHANGE EDIT PASSWORD ──
+function openChangeEditPw(){
+  // reuse change-pw modal but target edit pw
+  document.getElementById('pwCurrent').value='';
+  document.getElementById('pwNew').value='';
+  document.getElementById('pwConfirm').value='';
+  document.getElementById('pwMsg').textContent='';
+  document.querySelector('#pwModal h3').textContent='✏️ تغيير باسورد التعديل';
+  document.getElementById('pwModal').dataset.mode='edit';
+  document.getElementById('pwModal').classList.add('open');
+  setTimeout(()=>document.getElementById('pwCurrent').focus(),50);
+}
+
+// Patch saveNewPw to handle both modes
+const _origSaveNewPw = saveNewPw;
+window.saveNewPw = async function(){
+  const mode = document.getElementById('pwModal').dataset.mode;
+  if(mode==='edit'){
+    const cur=document.getElementById('pwCurrent').value;
+    const nw=document.getElementById('pwNew').value.trim();
+    const confirm=document.getElementById('pwConfirm').value.trim();
+    const msgEl=document.getElementById('pwMsg');
+    if(cur!==_editPw){msgEl.style.color='var(--red)';msgEl.textContent='❌ الباسورد الحالي غلط';return}
+    if(!nw){msgEl.style.color='var(--red)';msgEl.textContent='❌ أدخل الباسورد الجديد';return}
+    if(nw!==confirm){msgEl.style.color='var(--red)';msgEl.textContent='❌ الباسورد مش متطابق';return}
+    _editPw = nw;
+    await savePwToCloud('editPw', nw);
+    msgEl.style.color='var(--green)';msgEl.textContent='✅ تم تغيير باسورد التعديل';
+    setTimeout(()=>{
+      closePwModal();
+      document.getElementById('pwModal').dataset.mode='login';
+      document.querySelector('#pwModal h3').textContent='🔑 تغيير الباسورد';
+    },1000);
+  } else {
+    await _origSaveNewPw();
+  }
+};
+
+// Reset modal mode on close
+const _origClosePwModal = closePwModal;
+window.closePwModal = function(){
+  _origClosePwModal();
+  document.getElementById('pwModal').dataset.mode='login';
+  document.querySelector('#pwModal h3').textContent='🔑 تغيير الباسورد';
+};
+
+// ── EDIT PASSWORD GATE ──
+let _editPwCallback = null;
+
+function requireEditPw(actionLabel, callback){
+  _editPwCallback = callback;
+  document.getElementById('editPwDesc').textContent = `أدخل باسورد التعديل لـ "${actionLabel}"`;
+  document.getElementById('editPwInput').value='';
+  document.getElementById('editPwMsg').textContent='';
+  document.getElementById('editPwModal').style.display='flex';
+  setTimeout(()=>document.getElementById('editPwInput').focus(),50);
+}
+
+function closeEditPwModal(){
+  document.getElementById('editPwModal').style.display='none';
+  _editPwCallback=null;
+}
+
+function confirmEditPw(){
+  const val=document.getElementById('editPwInput').value;
+  const msgEl=document.getElementById('editPwMsg');
+  if(val===_editPw){
+    closeEditPwModal();
+    if(_editPwCallback) _editPwCallback();
+  } else {
+    msgEl.style.color='var(--red)';
+    msgEl.textContent='❌ باسورد غلط';
+    document.getElementById('editPwInput').value='';
+    document.getElementById('editPwInput').focus();
+  }
+}
+
+document.getElementById('editPwModal').addEventListener('click',function(e){if(e.target===this)closeEditPwModal()});
+
+document.getElementById('txAmount').addEventListener('keydown',e=>{if(e.key==='Enter')addEntry()});
+document.getElementById('txDesc').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('txAmount').focus()});
+</script>
+</body>
+</html>
